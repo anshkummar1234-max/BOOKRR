@@ -74,5 +74,52 @@
       button.addEventListener('pointerleave', () => { button.style.transform = ''; });
     });
   }
+  // Live directory and secure booking-request flow.
+  const venueSelect = document.getElementById('venueSelect');
+  const bookingForm = document.getElementById('bookingForm');
+  const bookingMessage = document.getElementById('bookingMessage');
+  const bookingDate = document.getElementById('bookingDate');
+  if (bookingDate) {
+    const now = new Date();
+    bookingDate.min = `${now.getFullYear()}-${String(now.getMonth()+1).padStart(2,'0')}-${String(now.getDate()).padStart(2,'0')}`;
+  }
+  let liveVenues = [];
+  if (venueSelect) {
+    fetch('/api/venues', { headers: { Accept: 'application/json' } })
+      .then(response => { if (!response.ok) throw new Error('Directory unavailable'); return response.json(); })
+      .then(data => {
+        liveVenues = Array.isArray(data.venues) ? data.venues : [];
+        venueSelect.replaceChildren(new Option('Choose a Gorakhpur turf', ''));
+        liveVenues.forEach(venue => venueSelect.add(new Option(`${venue.name} — ${venue.area}`, venue.id)));
+      })
+      .catch(() => { venueSelect.replaceChildren(new Option('Venue directory temporarily unavailable', '')); });
+  }
+  if (bookingForm) bookingForm.addEventListener('submit', async event => {
+    event.preventDefault();
+    const submit = bookingForm.querySelector('button[type="submit"]');
+    const values = Object.fromEntries(new FormData(bookingForm).entries());
+    const venue = liveVenues.find(item => String(item.id) === String(values.venue_id));
+    if (!venue) { bookingMessage.textContent = 'Please choose a venue from the loaded directory.'; return; }
+    if (!venue.sports.includes(values.sport) && values.sport !== 'Other sports') {
+      bookingMessage.textContent = 'That sport is not listed for this venue. Choose another sport or confirm directly with the venue.'; return;
+    }
+    submit.disabled = true; bookingMessage.textContent = 'Submitting your request…';
+    try {
+      const response = await fetch('/api/bookings', {
+        method: 'POST', headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
+        body: JSON.stringify(values)
+      });
+      const data = await response.json().catch(() => ({}));
+      if (response.status === 401) {
+        location.href = '/login?next=' + encodeURIComponent('/#book'); return;
+      }
+      if (!response.ok) throw new Error(data.error || 'Could not submit your request.');
+      bookingMessage.textContent = `Request #${data.booking.id} received for ${venue.name}. ${data.message}`;
+      bookingForm.reset();
+      bookingDate.min = `${new Date().getFullYear()}-${String(new Date().getMonth()+1).padStart(2,'0')}-${String(new Date().getDate()).padStart(2,'0')}`;
+      notify('Booking request saved securely. Venue confirmation is still required.');
+    } catch (error) { bookingMessage.textContent = error.message || 'Network error. Please try again.'; }
+    finally { submit.disabled = false; }
+  });
   // Keep the decorative motion inexpensive: CSS does the animation, JS only reacts to real interaction.
 })();
