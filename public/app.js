@@ -52,6 +52,22 @@
   document.querySelectorAll('.card-book').forEach(button => button.addEventListener('click', () => {
     notify(`${button.dataset.turf} selected — live booking will be connected in the full product.`);
   }));
+  // Matchday Portal: lightweight pointer parallax, with reduced-motion respected.
+  const portal = document.getElementById('matchPortal');
+  const portalStage = document.getElementById('portalStage');
+  if (portal && portalStage && !reduced) {
+    portal.addEventListener('pointermove', event => {
+      const rect = portal.getBoundingClientRect();
+      const x = (event.clientX - rect.left) / rect.width - .5;
+      const y = (event.clientY - rect.top) / rect.height - .5;
+      portal.style.transform = `perspective(1100px) rotateY(${x * 3.5}deg) rotateX(${-y * 2.5}deg)`;
+      portalStage.style.transform = `translate3d(${x * 7}px,${y * 5}px,0)`;
+    }, { passive: true });
+    portal.addEventListener('pointerleave', () => {
+      portal.style.transform = '';
+      portalStage.style.transform = '';
+    }, { passive: true });
+  }
   // Interactive match-day planner: builds a shareable invite and can prefill the booking form.
   const squadSport = document.getElementById('squadSport');
   const squadDate = document.getElementById('squadDate');
