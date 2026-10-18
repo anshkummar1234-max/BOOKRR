@@ -156,11 +156,10 @@
         }
         target = target.parentElement;
       }
-      target.style.setProperty('font-size', '9px', 'important');
-      target.style.setProperty('padding', '4px 7px', 'important');
-      target.style.setProperty('opacity', '0.42', 'important');
-      target.style.setProperty('transform', 'scale(0.78)', 'important');
-      target.style.setProperty('transform-origin', 'bottom right', 'important');
+      // Hide the attribution completely when it is accessible in the page DOM.
+      target.style.setProperty('display', 'none', 'important');
+      target.style.setProperty('visibility', 'hidden', 'important');
+      target.style.setProperty('pointer-events', 'none', 'important');
     });
   }
   softenHatchableBadge();
