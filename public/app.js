@@ -138,5 +138,33 @@
     installPrompt = null; installButton.hidden = true;
   });
   window.addEventListener('appinstalled', () => { if (installButton) installButton.hidden = true; notify('BOOKRR added to your home screen. Game on!'); });
+  // Make the platform-injected Hatchable attribution unobtrusive when it is part of the page DOM.
+  // If Hatchable renders it outside the page DOM (for example in a separate frame), this cannot affect it.
+  function softenHatchableBadge() {
+    const candidates = [...document.querySelectorAll('body *')].filter(el => {
+      const text = (el.innerText || el.textContent || '').trim();
+      return text === 'Built on Hatchable' && ![...el.children].some(child => (child.innerText || child.textContent || '').trim() === text);
+    });
+    candidates.forEach(el => {
+      let target = el;
+      for (let i = 0; i < 4 && target.parentElement; i++) {
+        const style = getComputedStyle(target);
+        const parentStyle = getComputedStyle(target.parentElement);
+        if (style.position === 'fixed' || parentStyle.position === 'fixed' || /hatchable/i.test(target.parentElement.className?.toString() || '')) {
+          if (parentStyle.position === 'fixed') target = target.parentElement;
+          break;
+        }
+        target = target.parentElement;
+      }
+      target.style.setProperty('font-size', '9px', 'important');
+      target.style.setProperty('padding', '4px 7px', 'important');
+      target.style.setProperty('opacity', '0.42', 'important');
+      target.style.setProperty('transform', 'scale(0.78)', 'important');
+      target.style.setProperty('transform-origin', 'bottom right', 'important');
+    });
+  }
+  softenHatchableBadge();
+  const badgeObserver = new MutationObserver(softenHatchableBadge);
+  badgeObserver.observe(document.documentElement, { childList: true, subtree: true });
   // Keep the decorative motion inexpensive: CSS does the animation, JS only reacts to real interaction.
 })();
