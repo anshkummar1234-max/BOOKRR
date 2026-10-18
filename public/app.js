@@ -84,6 +84,35 @@
     bookingDate.min = `${now.getFullYear()}-${String(now.getMonth()+1).padStart(2,'0')}-${String(now.getDate()).padStart(2,'0')}`;
   }
   let liveVenues = [];
+  const startTimeSelect = document.getElementById('startTimeSelect');
+  const availabilityNote = document.getElementById('availabilityNote');
+  async function loadAvailableTimes() {
+    if (!startTimeSelect || !bookingForm) return;
+    const venueId = venueSelect?.value;
+    const date = bookingDate?.value;
+    const duration = bookingForm.elements.duration_hours?.value || '1';
+    startTimeSelect.replaceChildren(new Option('Checking available times…', ''));
+    if (!venueId || !date) {
+      startTimeSelect.replaceChildren(new Option('Choose turf and date first', ''));
+      if (availabilityNote) availabilityNote.textContent = 'Choose a turf, date and duration to check times. Hours are provisional (06:00–23:00).';
+      return;
+    }
+    try {
+      const params = new URLSearchParams({ venue_id: venueId, date, duration_hours: duration });
+      const response = await fetch('/api/availability?' + params.toString(), { headers: { Accept: 'application/json' }, cache: 'no-store' });
+      const data = await response.json().catch(() => ({}));
+      if (!response.ok) throw new Error(data.error || 'Availability is temporarily unavailable.');
+      startTimeSelect.replaceChildren(new Option(data.available_times?.length ? 'Choose a start time' : 'No times currently listed', ''));
+      (data.available_times || []).forEach(time => startTimeSelect.add(new Option(time, time)));
+      if (availabilityNote) availabilityNote.textContent = data.note || 'Times are provisional until the venue confirms.';
+    } catch (error) {
+      startTimeSelect.replaceChildren(new Option('Could not load times', ''));
+      if (availabilityNote) availabilityNote.textContent = error.message;
+    }
+  }
+  venueSelect?.addEventListener('change', loadAvailableTimes);
+  bookingDate?.addEventListener('change', loadAvailableTimes);
+  bookingForm?.elements.duration_hours?.addEventListener('change', loadAvailableTimes);
   if (venueSelect) {
     fetch('/api/venues', { headers: { Accept: 'application/json' } })
       .then(response => { if (!response.ok) throw new Error('Directory unavailable'); return response.json(); })
@@ -116,6 +145,7 @@
       if (!response.ok) throw new Error(data.error || 'Could not submit your request.');
       bookingMessage.textContent = `Request #${data.booking.id} received for ${venue.name}. ${data.message}`;
       bookingForm.reset();
+      await loadAvailableTimes();
       bookingDate.min = `${new Date().getFullYear()}-${String(new Date().getMonth()+1).padStart(2,'0')}-${String(new Date().getDate()).padStart(2,'0')}`;
       notify('Booking request saved securely. Venue confirmation is still required.');
     } catch (error) { bookingMessage.textContent = error.message || 'Network error. Please try again.'; }
