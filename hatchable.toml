@@ -13,3 +13,7 @@ write = "own"
 [db.tables.venue_owner_applications]
 read = "own"
 write = "own"
+
+[db.tables.customer_preferences]
+read = "own"
+write = "own"
