@@ -121,5 +121,22 @@
     } catch (error) { bookingMessage.textContent = error.message || 'Network error. Please try again.'; }
     finally { submit.disabled = false; }
   });
+  // Installable mobile app (PWA). Booking APIs are deliberately never cached.
+  if ('serviceWorker' in navigator && location.protocol === 'https:') {
+    window.addEventListener('load', () => navigator.serviceWorker.register('/sw.js').catch(() => {}));
+  }
+  let installPrompt = null;
+  const installButton = document.getElementById('installApp');
+  window.addEventListener('beforeinstallprompt', event => {
+    event.preventDefault(); installPrompt = event;
+    if (installButton) installButton.hidden = false;
+  });
+  if (installButton) installButton.addEventListener('click', async () => {
+    if (!installPrompt) { notify('On iPhone: Share → Add to Home Screen. On Android: browser menu → Install app.'); return; }
+    installPrompt.prompt();
+    await installPrompt.userChoice;
+    installPrompt = null; installButton.hidden = true;
+  });
+  window.addEventListener('appinstalled', () => { if (installButton) installButton.hidden = true; notify('BOOKRR added to your home screen. Game on!'); });
   // Keep the decorative motion inexpensive: CSS does the animation, JS only reacts to real interaction.
 })();
