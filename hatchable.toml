@@ -9,3 +9,7 @@ write = "member"
 [db.tables.bookings]
 read = "own"
 write = "own"
+
+[db.tables.venue_owner_applications]
+read = "own"
+write = "own"

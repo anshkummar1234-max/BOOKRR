@@ -1,0 +1,29 @@
+import { db } from 'hatchable';
+
+export const access = 'admin';
+export const methods = ['GET', 'PUT'];
+
+export default async function (req, res) {
+  try {
+    if (req.method === 'GET') {
+      const result = await db.query(
+        'SELECT id, name, area, sports, owner_user_id, owner_contact_phone, hourly_rate, opening_time::text AS opening_time, closing_time::text AS closing_time, verification_status, is_active FROM venues ORDER BY is_active DESC, name ASC LIMIT 300'
+      );
+      return res.json({ venues: result.rows });
+    }
+    if (req.method !== 'PUT') return res.status(405).json({ error: 'Method not allowed.' });
+    const id = Number(req.body?.id);
+    const isActive = req.body?.is_active;
+    const verification = req.body?.verification_status;
+    if (!Number.isSafeInteger(id) || id < 1 || typeof isActive !== 'boolean') return res.status(400).json({ error: 'Provide a valid venue ID and active status.' });
+    if (verification !== undefined && !['verified','unverified','rejected'].includes(verification)) return res.status(400).json({ error: 'Invalid verification status.' });
+    const result = await db.query(
+      'UPDATE venues SET is_active = $1, verification_status = COALESCE($2, verification_status), updated_at = now() WHERE id = $3 RETURNING id, name, is_active, verification_status',
+      [isActive, verification ?? null, id]
+    );
+    if (!result.rows.length) return res.status(404).json({ error: 'Venue not found.' });
+    return res.json({ venue: result.rows[0] });
+  } catch (error) {
+    return res.status(500).json({ error: 'Venue moderation failed.' });
+  }
+}
