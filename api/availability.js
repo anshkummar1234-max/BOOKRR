@@ -18,7 +18,7 @@ export default async function (req, res) {
   if (!validDate(date)) return res.status(400).json({ error: 'Choose a valid date.' });
   if (!Number.isInteger(duration) || duration < 1 || duration > 4) return res.status(400).json({ error: 'Duration must be 1–4 hours.' });
   try {
-    const venue = await db.query('SELECT id FROM venues WHERE id = $1 AND is_active = true', [venueId]);
+    const venue = await db.query('SELECT id, opening_time::text AS opening_time, closing_time::text AS closing_time, verification_status FROM venues WHERE id = $1 AND is_active = true', [venueId]);
     if (!venue.rows.length) return res.status(404).json({ error: 'That turf is no longer listed.' });
     const occupied = await db.query(
       "SELECT start_time::text AS start_time, duration_hours FROM bookings " +
@@ -34,11 +34,13 @@ export default async function (req, res) {
     const localNow = indiaDateTime();
     const today = `${localNow.year}-${localNow.month}-${localNow.day}`;
     const currentMinute = Number(localNow.hour) * 60 + Number(localNow.minute);
-    for (let hour = 6; hour + duration <= 23; hour++) {
-      const start = hour * 60;
+    const toMinutes = value => { const p = String(value).slice(0, 5).split(':').map(Number); return p[0] * 60 + p[1]; };
+    const openingMinute = toMinutes(venue.rows[0].opening_time);
+    const closingMinute = toMinutes(venue.rows[0].closing_time);
+    for (let start = Math.ceil(openingMinute / 60) * 60; start + duration * 60 <= closingMinute; start += 60) {
       const end = start + duration * 60;
       if (date === today && start <= currentMinute) continue;
-      if (!busy.some(slot => start < slot.end && end > slot.start)) times.push(String(hour).padStart(2, '0') + ':00');
+      if (!busy.some(slot => start < slot.end && end > slot.start)) times.push(String(Math.floor(start / 60)).padStart(2, '0') + ':00');
     }
     res.setHeader('Cache-Control', 'no-store');
     return res.json({
@@ -46,7 +48,7 @@ export default async function (req, res) {
       date,
       duration_hours: duration,
       available_times: times,
-      note: 'Availability reflects BOOKRR requests and confirmations only. Venue operating hours, walk-in bookings, and live owner calendars are not yet connected; confirm the slot with the venue.'
+      note: (venue.rows[0].verification_status === 'verified' ? 'Listed venue hours are owner/admin verified. ' : 'Hours are provisional defaults and have not been verified. ') + 'Availability reflects BOOKRR requests and confirmations only; walk-in bookings and live owner calendars are not yet connected, so confirm the slot with the venue.'
     });
   } catch (error) {
     return res.status(500).json({ error: 'Could not load slot availability.' });

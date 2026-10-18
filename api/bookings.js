@@ -27,17 +27,21 @@ export default async function (req, res) {
   if (body.booking_date < today) return res.status(400).json({ error: 'Booking date cannot be in the past.' });
   if (!validTime(body.start_time)) return res.status(400).json({ error: 'Choose a valid start time.' });
   if (!Number.isInteger(duration) || duration < 1 || duration > 4) return res.status(400).json({ error: 'Duration must be 1–4 hours.' });
-  const startHour = Number(body.start_time.slice(0, 2));
-  const startMinute = Number(body.start_time.slice(3, 5));
-  if (startMinute !== 0 || startHour < 6 || startHour + duration > 23) {
-    return res.status(400).json({ error: 'Choose an hourly start between 06:00 and the venue’s provisional 23:00 closing time.' });
-  }
+  // Operating-hours validation is performed after loading the venue below.
   if (!['Football','Cricket','Badminton','Other sports'].includes(sport)) return res.status(400).json({ error: 'Choose a listed sport.' });
 
   try {
-    const venue = await db.query('SELECT id, sports FROM venues WHERE id = $1 AND is_active = true', [venueId]);
+    const venue = await db.query('SELECT id, sports, opening_time::text AS opening_time, closing_time::text AS closing_time FROM venues WHERE id = $1 AND is_active = true', [venueId]);
     if (!venue.rows.length) return res.status(404).json({ error: 'That turf is no longer listed.' });
     if (!venue.rows[0].sports.includes(sport) && sport !== 'Other sports') return res.status(400).json({ error: 'That sport is not listed for this venue. Please contact the venue to confirm.' });
+    const startHour = Number(body.start_time.slice(0, 2));
+    const startMinute = Number(body.start_time.slice(3, 5));
+    const openingParts = String(venue.rows[0].opening_time).slice(0, 5).split(':').map(Number);
+    const closingParts = String(venue.rows[0].closing_time).slice(0, 5).split(':').map(Number);
+    const startMinutes = startHour * 60 + startMinute;
+    const openingMinutes = openingParts[0] * 60 + openingParts[1];
+    const closingMinutes = closingParts[0] * 60 + closingParts[1];
+    if (startMinute !== 0 || startMinutes < openingMinutes || startMinutes + duration * 60 > closingMinutes) return res.status(400).json({ error: 'Choose an hourly start within this venue’s listed opening hours.' });
     const recent = await db.query(
       "SELECT count(*)::int AS total FROM bookings WHERE user_id = $1 AND created_at > now() - interval '1 hour'",
       [String(req.user.id)]

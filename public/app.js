@@ -119,7 +119,7 @@
       .then(data => {
         liveVenues = Array.isArray(data.venues) ? data.venues : [];
         venueSelect.replaceChildren(new Option('Choose a Gorakhpur turf', ''));
-        liveVenues.forEach(venue => venueSelect.add(new Option(`${venue.name} — ${venue.area}`, venue.id)));
+        liveVenues.forEach(venue => venueSelect.add(new Option(`${venue.name} — ${venue.area}${venue.hourly_rate == null ? '' : ' · ₹' + venue.hourly_rate + '/hour'}`, venue.id)));
       })
       .catch(() => { venueSelect.replaceChildren(new Option('Venue directory temporarily unavailable', '')); });
   }

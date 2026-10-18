@@ -1,0 +1,36 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="theme-color" content="#10140f"><title>List your turf · BOOKRR</title><link rel="icon" href="/icon.svg" type="image/svg+xml"><link rel="stylesheet" href="/theme.css"><style>
+.owner-page{max-width:900px;margin:48px auto;padding:0 20px 60px}.owner-page h1{font:800 clamp(42px,7vw,72px)/.9 var(--display);margin:16px 0}.owner-panel{background:#191e17;border:1px solid #ffffff20;padding:clamp(18px,4vw,32px);margin:24px 0}.owner-form{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:16px}.owner-form label{display:flex;flex-direction:column;gap:8px;font-size:11px;letter-spacing:.08em;color:#bdc6b2}.owner-form input,.owner-form select{width:100%;padding:13px;background:#0e120d;border:1px solid #ffffff2a;color:#f3f4eb;border-radius:3px}.owner-form .wide{grid-column:1/-1}.checks{display:flex;flex-wrap:wrap;gap:14px}.checks label{display:flex;flex-direction:row;align-items:center;letter-spacing:0;font-size:13px}.checks input{width:auto}.owner-submit{padding:14px 18px;background:var(--lime);border:0;font-weight:800;cursor:pointer}.owner-submit:disabled{opacity:.5}.owner-message{min-height:22px;color:var(--lime);font-size:13px}.app-card{border-top:1px solid #ffffff20;padding:16px 0}.muted{color:#aab49e;font-size:13px;line-height:1.7}@media(max-width:600px){.owner-form{grid-template-columns:1fr}.owner-form .wide{grid-column:auto}}
+</style></head><body><nav class="nav"><a class="brand" href="/"><img class="brand-logo" src="/icon.svg" alt="" width="38" height="38">BOOKRR</a><div class="nav-links" style="display:flex"><a href="/">Discover turfs</a><a href="/my-bookings.html">My bookings</a></div><a class="nav-cta" href="/admin-owners.html">Admin review ↗</a></nav><main class="owner-page"><div class="eyebrow">FOR TURF OWNERS · UTTAR PRADESH</div><h1>PUT YOUR TURF<br><span class="lime-word">ON THE MAP.</span></h1><p class="muted">Submit your venue for BOOKRR verification. It will not appear in the public directory until a BOOKRR admin approves it. Existing venue listings can still be managed by the BOOKRR team.</p>
+<section class="owner-panel"><h2>Venue application</h2><form id="ownerForm" class="owner-form">
+<label>YOUR NAME<input name="applicant_name" required minlength="2" maxlength="80" autocomplete="name" placeholder="Full name"></label>
+<label>OWNER CONTACT PHONE<input name="contact_phone" required inputmode="tel" autocomplete="tel" placeholder="+91 98765 43210"></label>
+<label>VENUE NAME<input name="venue_name" required minlength="3" maxlength="120" placeholder="Your turf or sports centre"></label>
+<label>AREA / CITY, UTTAR PRADESH<input name="area" required minlength="3" maxlength="160" placeholder="e.g. Civil Lines, Gorakhpur"></label>
+<label class="wide">GOOGLE MAPS SEARCH TEXT<input name="map_query" required minlength="3" maxlength="250" placeholder="Venue name, area, city, Uttar Pradesh"></label>
+<div class="wide"><div class="muted" style="margin-bottom:10px">SPORTS AVAILABLE · select at least one</div><div class="checks"><label><input type="checkbox" name="sports" value="Football"> Football</label><label><input type="checkbox" name="sports" value="Cricket"> Cricket</label><label><input type="checkbox" name="sports" value="Badminton"> Badminton</label><label><input type="checkbox" name="sports" value="Other sports"> Other sports</label></div></div>
+<label>HOURLY PRICE (₹, OPTIONAL)<input name="hourly_rate" type="number" min="0" max="50000" step="50" placeholder="Leave blank if not set"></label>
+<label>OPENING TIME<input name="opening_time" type="time" value="06:00" required></label>
+<label>CLOSING TIME<input name="closing_time" type="time" value="23:00" required></label>
+<div class="wide"><button class="owner-submit" type="submit">Submit for verification ↗</button><p id="ownerMessage" class="owner-message" role="status" aria-live="polite"></p></div>
+</form></section>
+<section class="owner-panel"><h2>Your applications</h2><p class="muted">Pending means the team has not reviewed it yet. Approved means the venue has been added to the public directory.</p><div id="applications" class="muted">Loading your applications…</div></section>
+</main><script>
+(() => {
+ const form=document.getElementById('ownerForm'), message=document.getElementById('ownerMessage'), list=document.getElementById('applications');
+ const esc=value=>String(value??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+ async function load(){
+  const r=await fetch('/api/owner/applications',{headers:{Accept:'application/json'}});
+  const d=await r.json().catch(()=>({}));
+  if(r.status===401){location.href='/login?next='+encodeURIComponent('/owner.html');return}
+  if(!r.ok)throw new Error(d.error||'Could not load applications.');
+  list.innerHTML=(d.applications||[]).length?(d.applications||[]).map(a=>'<article class="app-card"><strong>'+esc(a.venue_name)+'</strong><p>'+esc(a.area)+' · '+esc((a.sports||[]).join(', '))+'</p><p>Status: <strong>'+esc(a.status.toUpperCase())+'</strong>'+(a.hourly_rate==null?'':' · ₹'+esc(a.hourly_rate)+'/hour')+'</p></article>').join(''):'No applications yet.';
+ }
+ form.addEventListener('submit',async e=>{
+  e.preventDefault();const button=form.querySelector('button[type="submit"]');button.disabled=true;message.textContent='Submitting…';
+  const fd=new FormData(form), body=Object.fromEntries(fd.entries());body.sports=fd.getAll('sports');body.hourly_rate=body.hourly_rate||null;
+  try{const r=await fetch('/api/owner/applications',{method:'POST',headers:{'Content-Type':'application/json',Accept:'application/json'},body:JSON.stringify(body)});const d=await r.json().catch(()=>({}));if(r.status===401){location.href='/login?next='+encodeURIComponent('/owner.html');return}if(!r.ok)throw new Error(d.error||'Could not submit.');message.textContent=d.message||'Application submitted.';form.reset();form.elements.opening_time.value='06:00';form.elements.closing_time.value='23:00';await load()}catch(err){message.textContent=err.message}finally{button.disabled=false}
+ });
+ load().catch(err=>{list.textContent=err.message});
+})();
+</script></body></html>
