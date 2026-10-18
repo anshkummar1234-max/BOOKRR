@@ -4,24 +4,24 @@ export const access = 'user';
 export const methods = ['POST'];
 
 function validDate(value) {
-  if (typeof value !== 'string' || !/^\\d{4}-\\d{2}-\\d{2}$/.test(value)) return false;
+  if (typeof value !== 'string' || !/^\d{4}-\d{2}-\d{2}$/.test(value)) return false;
   const d = new Date(value + 'T00:00:00Z');
   return !Number.isNaN(d.getTime()) && d.toISOString().slice(0, 10) === value;
 }
-function validTime(value) { return typeof value === 'string' && /^(?:[01]\\d|2[0-3]):[0-5]\\d$/.test(value); }
+function validTime(value) { return typeof value === 'string' && /^(?:[01]\d|2[0-3]):[0-5]\d$/.test(value); }
 function indiaToday() { const parts = new Intl.DateTimeFormat('en-GB', { timeZone: 'Asia/Kolkata', year: 'numeric', month: '2-digit', day: '2-digit' }).formatToParts(new Date()); const p = Object.fromEntries(parts.map(x => [x.type, x.value])); return `${p.year}-${p.month}-${p.day}`; }
 
 export default async function (req, res) {
   const body = req.body || {};
   const venueId = Number(body.venue_id);
   const name = typeof body.customer_name === 'string' ? body.customer_name.trim() : '';
-  const phone = typeof body.contact_phone === 'string' ? body.contact_phone.replace(/[\\s()-]/g, '') : '';
+  const phone = typeof body.contact_phone === 'string' ? body.contact_phone.replace(/[\s()-]/g, '') : '';
   const sport = typeof body.sport === 'string' ? body.sport.trim() : '';
   const notes = typeof body.notes === 'string' ? body.notes.trim().slice(0, 500) : '';
   const duration = Number(body.duration_hours || 1);
   if (!Number.isSafeInteger(venueId) || venueId < 1) return res.status(400).json({ error: 'Choose a valid turf.' });
   if (name.length < 2 || name.length > 80) return res.status(400).json({ error: 'Enter your name (2–80 characters).' });
-  if (!/^\\+?\\d{10,15}$/.test(phone)) return res.status(400).json({ error: 'Enter a valid phone number including country code if needed.' });
+  if (!/^\+?\d{10,15}$/.test(phone)) return res.status(400).json({ error: 'Enter a valid phone number including country code if needed.' });
   if (!validDate(body.booking_date)) return res.status(400).json({ error: 'Choose a valid date.' });
   const today = indiaToday();
   if (body.booking_date < today) return res.status(400).json({ error: 'Booking date cannot be in the past.' });
