@@ -18,31 +18,92 @@
   navLinks.querySelectorAll('a').forEach(link => link.addEventListener('click', () => {
     navLinks.classList.remove('open'); menu.setAttribute('aria-expanded', 'false'); menu.textContent = '☰';
   }));
+  let activeSportFilter = 'all';
+  function filterTurfCards() {
+    const query = document.getElementById('city').value.trim().toLowerCase();
+    const cards = [...document.querySelectorAll('.turf-card')];
+    let visible = 0;
+    cards.forEach(card => {
+      const sportMatch = activeSportFilter === 'all' || card.dataset.sport === activeSportFilter || (activeSportFilter === 'box' && card.dataset.sport === 'cricket');
+      const textMatch = !query || card.textContent.toLowerCase().includes(query) || 'gorakhpur'.includes(query);
+      card.hidden = !(sportMatch && textMatch);
+      if (!card.hidden) visible++;
+    });
+    return visible;
+  }
   document.querySelectorAll('.filter').forEach(button => button.addEventListener('click', () => {
     document.querySelectorAll('.filter').forEach(item => item.classList.remove('active'));
     button.classList.add('active');
-    const filter = button.dataset.filter;
-    document.querySelectorAll('.turf-card').forEach(card => {
-      card.hidden = filter !== 'all' && card.dataset.sport !== filter && !(filter === 'box' && card.dataset.sport === 'cricket');
-    });
+    activeSportFilter = button.dataset.filter;
+    const count = filterTurfCards();
+    document.getElementById('searchNote').textContent = `${count} listed venue card${count === 1 ? '' : 's'} match your filters. Venue details and prices should be confirmed directly.`;
   }));
   document.getElementById('searchBtn').addEventListener('click', () => {
     const city = document.getElementById('city').value.trim();
     const note = document.getElementById('searchNote');
-    if (!city) {
-      note.textContent = 'Enter a city or area to preview a local search.';
-      document.getElementById('city').focus();
-      return;
-    }
-    note.textContent = `Showing sample discovery cards for ${city}. Live location search is not connected in this prototype.`;
+    const count = filterTurfCards();
+    note.textContent = city ? (count ? `${count} listed venue card${count === 1 ? '' : 's'} match “${city}”. Search covers the currently listed sample cards.` : `No listed venue cards match “${city}”. Try Taramandal, Sahara Estate, Ranidiha, or Gorakhpur.`) : `${count} listed venue cards shown. Enter an area or venue name to narrow the list.`;
     document.querySelector('#discover .turf-grid').scrollIntoView({ behavior: reduced ? 'auto' : 'smooth', block: 'start' });
   });
+  document.getElementById('city').addEventListener('input', () => { filterTurfCards(); });
   document.getElementById('city').addEventListener('keydown', event => {
     if (event.key === 'Enter') document.getElementById('searchBtn').click();
   });
   document.querySelectorAll('.card-book').forEach(button => button.addEventListener('click', () => {
     notify(`${button.dataset.turf} selected — live booking will be connected in the full product.`);
   }));
+  // Interactive match-day planner: builds a shareable invite and can prefill the booking form.
+  const squadSport = document.getElementById('squadSport');
+  const squadDate = document.getElementById('squadDate');
+  const squadTime = document.getElementById('squadTime');
+  const squadSize = document.getElementById('squadSize');
+  const squadArea = document.getElementById('squadArea');
+  const squadMessage = document.getElementById('squadMessage');
+  const localDate = new Date();
+  const localDateValue = `${localDate.getFullYear()}-${String(localDate.getMonth()+1).padStart(2,'0')}-${String(localDate.getDate()).padStart(2,'0')}`;
+  if (squadDate) squadDate.min = localDateValue;
+  function squadPlan() {
+    const sport = squadSport?.value || 'Football';
+    const date = squadDate?.value || '';
+    const time = squadTime?.value || '06:00 PM';
+    const players = Number(squadSize?.value || 10);
+    const area = squadArea?.value.trim() || 'your area';
+    const readableDate = date ? new Date(`${date}T12:00:00`).toLocaleDateString(undefined,{weekday:'short',day:'numeric',month:'short',year:'numeric'}) : 'Date to be decided';
+    return {sport,date,time,players,area,readableDate,text:`🏟️ BOOKRR MATCH INVITE\n\nWho’s in for ${sport.toLowerCase()}?\n📅 ${readableDate}\n⏰ ${time}\n👥 Looking for ${players} players\n📍 ${area}\n\nReply IN if you’re playing. Let’s lock a turf on BOOKRR: ${location.origin}/#book\n\nInvite only — this is not a confirmed turf booking.`};
+  }
+  function updateSquadPreview() {
+    const plan = squadPlan();
+    document.getElementById('playerCountLabel').textContent = `${plan.players} player${plan.players===1?'':'s'}`;
+    document.getElementById('matchSportView').textContent = plan.sport;
+    document.getElementById('matchPlayersView').textContent = `${plan.players} players`;
+    document.getElementById('matchWhenView').textContent = `${plan.date ? plan.readableDate : 'Choose a date'} · ${plan.time}`;
+    document.getElementById('matchAreaView').textContent = plan.area;
+    const title = document.getElementById('matchCardTitle');
+    title.innerHTML = `${plan.sport.toUpperCase()}.<br>YOUR SQUAD.<br><span>GAME ON.</span>`;
+  }
+  [squadSport,squadDate,squadTime,squadSize,squadArea].forEach(control => control?.addEventListener('input', updateSquadPreview));
+  document.getElementById('generateInvite')?.addEventListener('click', async () => {
+    const plan = squadPlan();
+    if (!plan.date) { squadMessage.textContent = 'Choose a match date first, then generate your invite.'; squadDate?.focus(); return; }
+    try {
+      if (navigator.share) { await navigator.share({title:'BOOKRR Match Invite',text:plan.text}); squadMessage.textContent = 'Invite shared. Turf booking is still a separate step and is not confirmed yet.'; }
+      else if (navigator.clipboard?.writeText) { await navigator.clipboard.writeText(plan.text); squadMessage.textContent = 'Match invite copied. Paste it into your squad chat. Booking is not confirmed yet.'; }
+      else { window.prompt('Copy your BOOKRR match invite:',plan.text); squadMessage.textContent = 'Copy the invite text into your squad chat. Booking is not confirmed yet.'; }
+    } catch (error) { if (error?.name !== 'AbortError') { try { window.prompt('Copy your BOOKRR match invite:',plan.text); } catch {} } }
+  });
+  document.getElementById('bookFromPlan')?.addEventListener('click', () => {
+    const plan = squadPlan();
+    const bookingSport = document.getElementById('sportSelect');
+    const bookingDateInput = document.getElementById('bookingDate');
+    const notes = bookingForm?.elements.notes;
+    if (bookingSport) { const match = [...bookingSport.options].find(option => option.value.toLowerCase() === plan.sport.toLowerCase()); if (match) bookingSport.value = match.value; }
+    if (bookingDateInput && plan.date) bookingDateInput.value = plan.date;
+    if (notes) notes.value = `Match plan: ${plan.players} players, ${plan.time}, area: ${plan.area}. Confirm slot with venue.`;
+    if (typeof loadAvailableTimes === 'function') loadAvailableTimes();
+    document.getElementById('book')?.scrollIntoView({behavior:reduced?'auto':'smooth',block:'start'});
+    squadMessage.textContent = 'Match details copied into the booking form where supported. Choose a venue and available start time; no booking has been submitted.';
+  });
+  updateSquadPreview();
   const revealEls = document.querySelectorAll('.reveal, .step');
   if ('IntersectionObserver' in window && !reduced) {
     const observer = new IntersectionObserver(entries => entries.forEach(entry => {
