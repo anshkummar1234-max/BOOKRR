@@ -16,39 +16,4 @@
 <div class="wide"><button class="owner-submit" type="submit">Submit for verification ↗</button><p id="ownerMessage" class="owner-message" role="status" aria-live="polite"></p></div>
 </form></section>
 <section class="owner-panel"><h2>Your applications</h2><p class="muted">Pending means the team has not reviewed it yet. Approved means the venue has been added to the public directory.</p><div id="applications" class="muted">Loading your applications…</div></section>
-</main><script>
-(() => {
- const form=document.getElementById('ownerForm'), message=document.getElementById('ownerMessage'), list=document.getElementById('applications');
- const dashboard=document.getElementById('ownerDashboard'), greeting=document.getElementById('ownerGreeting'), summary=document.getElementById('ownerSummary'), stats=document.getElementById('ownerStats'), venues=document.getElementById('ownerVenues'), bookings=document.getElementById('ownerBookings');
- const time=value=>String(value||'').slice(0,5);
- async function loadDashboard(){
-  const r=await fetch('/api/owner/dashboard',{headers:{Accept:'application/json'}});
-  const d=await r.json().catch(()=>({}));
-  if(r.status===401){location.href='/login?next='+encodeURIComponent('/owner.html');return}
-  if(!r.ok)throw new Error(d.error||'Could not load owner dashboard.');
-  const owned=d.venues||[], rows=d.bookings||[], apps=d.applications||[];
-  greeting.textContent='Welcome'+(d.owner&&d.owner.name?' back, '+d.owner.name.split(' ')[0]:' to your owner dashboard');
-  summary.textContent=(d.owner&&d.owner.email?d.owner.email+' · ':'')+'A personalised view of your venues, booking requests and application status.';
-  const pending=rows.filter(x=>x.status==='requested').length, confirmed=rows.filter(x=>x.status==='confirmed').length;
-  stats.innerHTML=[['Your venues',owned.length],['Pending requests',pending],['Confirmed bookings',confirmed],['Applications',apps.filter(x=>x.status==='pending').length+' pending']].map(x=>'<div style="background:#0e120d;border:1px solid #ffffff20;padding:14px"><div class="muted">'+esc(x[0])+'</div><strong style="font:800 28px var(--display);color:var(--lime)">'+esc(x[1])+'</strong></div>').join('');
-  venues.innerHTML=owned.length?owned.map(v=>'<article class="app-card"><strong>'+esc(v.name)+'</strong><p>'+esc(v.area)+' · '+esc((v.sports||[]).join(', '))+'</p><p>'+esc(v.verification_status||'unverified').toUpperCase()+' · '+(v.is_active?'PUBLIC LISTING':'HIDDEN LISTING')+' · '+(v.hourly_rate==null?'Price not set':'₹'+esc(v.hourly_rate)+'/hour')+' · '+esc(time(v.opening_time))+'–'+esc(time(v.closing_time))+'</p></article>').join(''):'<p class="muted">No approved venues are linked to this account yet. Submit a venue application below; once approved, it will appear here.</p>';
-  bookings.innerHTML=rows.length?rows.map(b=>'<article class="app-card"><strong>#'+esc(b.id)+' · '+esc(b.venue_name)+'</strong><p>'+esc(b.customer_name)+' · '+esc(b.contact_phone)+' · '+esc(b.sport)+'</p><p>'+esc(b.booking_date)+' at '+esc(time(b.start_time))+' · '+esc(b.duration_hours)+' hour(s) · Status: <strong>'+esc(String(b.status).toUpperCase())+'</strong></p>'+(b.notes?'<p>'+esc(b.notes)+'</p>':'')+(['requested','confirmed'].includes(b.status)?'<div class="actions" style="display:flex;gap:8px;flex-wrap:wrap;margin-top:10px">'+(b.status==='requested'?'<button class="owner-submit" data-booking-id="'+esc(b.id)+'" data-status="confirmed">Confirm</button><button class="owner-submit" style="background:transparent;color:#f3f4eb;border:1px solid #ffffff40" data-booking-id="'+esc(b.id)+'" data-status="rejected">Reject</button>':'<button class="owner-submit" data-booking-id="'+esc(b.id)+'" data-status="completed">Mark completed</button><button class="owner-submit" style="background:transparent;color:#f3f4eb;border:1px solid #ffffff40" data-booking-id="'+esc(b.id)+'" data-status="cancelled">Cancel</button>')+'</div>':'')+'</article>').join(''):'<p class="muted">No booking requests have been recorded for your venues yet.</p>';
- }
- dashboard.addEventListener('click',async e=>{const button=e.target.closest('button[data-booking-id]');if(!button)return;button.disabled=true;summary.textContent='Updating booking…';try{const r=await fetch('/api/owner/dashboard',{method:'PUT',headers:{'Content-Type':'application/json',Accept:'application/json'},body:JSON.stringify({id:Number(button.dataset.bookingId),status:button.dataset.status})}),d=await r.json().catch(()=>({}));if(r.status===401){location.href='/login?next='+encodeURIComponent('/owner.html');return}if(!r.ok)throw new Error(d.error||'Could not update booking.');summary.textContent='Booking updated successfully.';await loadDashboard()}catch(err){summary.textContent=err.message}finally{button.disabled=false}});
- const esc=value=>String(value??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
- async function load(){
-  const r=await fetch('/api/owner/applications',{headers:{Accept:'application/json'}});
-  const d=await r.json().catch(()=>({}));
-  if(r.status===401){location.href='/login?next='+encodeURIComponent('/owner.html');return}
-  if(!r.ok)throw new Error(d.error||'Could not load applications.');
-  list.innerHTML=(d.applications||[]).length?(d.applications||[]).map(a=>'<article class="app-card"><strong>'+esc(a.venue_name)+'</strong><p>'+esc(a.area)+' · '+esc((a.sports||[]).join(', '))+'</p><p>Status: <strong>'+esc(a.status.toUpperCase())+'</strong>'+(a.hourly_rate==null?'':' · ₹'+esc(a.hourly_rate)+'/hour')+'</p></article>').join(''):'No applications yet.';
- }
- form.addEventListener('submit',async e=>{
-  e.preventDefault();const button=form.querySelector('button[type="submit"]');button.disabled=true;message.textContent='Submitting…';
-  const fd=new FormData(form), body=Object.fromEntries(fd.entries());body.sports=fd.getAll('sports');body.hourly_rate=body.hourly_rate||null;
-  try{const r=await fetch('/api/owner/applications',{method:'POST',headers:{'Content-Type':'application/json',Accept:'application/json'},body:JSON.stringify(body)});const d=await r.json().catch(()=>({}));if(r.status===401){location.href='/login?next='+encodeURIComponent('/owner.html');return}if(!r.ok)throw new Error(d.error||'Could not submit.');message.textContent=d.message||'Application submitted.';form.reset();form.elements.opening_time.value='06:00';form.elements.closing_time.value='23:00';await load()}catch(err){message.textContent=err.message}finally{button.disabled=false}
- });
- load().catch(err=>{list.textContent=err.message});
- loadDashboard().catch(err=>{summary.textContent=err.message;venues.textContent='Dashboard unavailable.';bookings.textContent='Dashboard unavailable.'});
-})();
-</script><script defer src="/protection.secure.js"></script></body></html>
+</main><script defer src="/owner.inline.secure.js"></script><script defer src="/protection.secure.js"></script></body></html>

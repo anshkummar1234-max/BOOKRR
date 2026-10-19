@@ -19,42 +19,4 @@
 <section class="growth-panel"><h2>RECENT MATCH PLANS</h2><div class="growth-table-wrap"><table class="growth-table"><thead><tr><th>Created</th><th>Match</th><th>Plan date</th><th>Status</th><th>Opens</th><th>RSVPs</th><th>Linked bookings</th><th>Invite</th></tr></thead><tbody id="recentMatches"></tbody></table></div></section>
 <p class="growth-muted" style="margin-top:18px">Privacy note: invite analytics use a temporary browser-session key, not names, email addresses or phone numbers. Reward and payout reports are intentionally absent until qualification and fraud checks are implemented.</p>
 </div></main>
-<script>
-(() => {
- const message=document.getElementById('growthMessage'),content=document.getElementById('growthContent');
- const count=n=>new Intl.NumberFormat().format(Number(n||0));
- const safe=value=>String(value??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
- async function load(){
-  message.textContent='Loading growth data…';message.classList.remove('growth-error');
-  try{
-   const r=await fetch('/api/admin/growth',{headers:{Accept:'application/json'},cache:'no-store'});
-   const d=await r.json().catch(()=>({}));
-   if(r.status===401){message.textContent='Admin sign-in required. Sign in with an authorized BOOKRR admin account.';message.classList.add('growth-error');return}
-   if(r.status===403){message.textContent='Access denied. This dashboard is restricted to project owners and authorized admin collaborators.';message.classList.add('growth-error');return}
-   if(!r.ok)throw new Error(d.error||'Growth data is temporarily unavailable.');
-   const t=d.totals||{},e=d.events||{},b=d.booking_statuses||{};
-   document.getElementById('plansCreated').textContent=count(t.plans_created);
-   document.getElementById('inviteOpens').textContent=count(e.invite_opened);
-   document.getElementById('rsvpTotal').textContent=count(e.rsvp_submitted);
-   document.getElementById('linkedBookings').textContent=count((b.requested||0)+(b.confirmed||0)+(b.completed||0));
-   document.getElementById('funnelOpens').textContent=count(e.invite_opened);
-   document.getElementById('funnelRsvps').textContent=count(e.rsvp_submitted);
-   document.getElementById('funnelConfirmed').textContent=count((b.confirmed||0)+(b.completed||0));
-   document.getElementById('funnelCompleted').textContent=count(b.completed||0);
-   const open=Number(e.invite_opened||0),rsvps=Number(e.rsvp_submitted||0);
-   document.getElementById('funnelNote').textContent=open?('Recorded RSVP events relative to invite opens: '+Math.round(rsvps/open*100)+'%. This is a directional funnel indicator, not a causal or person-level conversion rate.'): 'No invite opens have been recorded yet. Share a match invite and ask the squad to open it to begin measuring the funnel.';
-   const body=document.getElementById('recentMatches');body.replaceChildren();
-   (d.recent_matches||[]).forEach(m=>{
-    const tr=document.createElement('tr');
-    const values=[new Date(m.created_at).toLocaleDateString(),m.organizer_name+' · '+m.sport,m.match_date,m.status,count(m.unique_opens),count(m.rsvp_count),count(m.linked_booking_count)];
-    values.forEach((v,i)=>{const td=document.createElement('td');td.textContent=v;if(i===3){const tag=document.createElement('span');tag.className='growth-tag';tag.textContent=v;td.replaceChildren(tag)}tr.append(td)});
-    const td=document.createElement('td'),a=document.createElement('a');a.href='/match.html?token='+encodeURIComponent(m.invite_token);a.textContent='Open invite ↗';a.style.color='var(--lime)';td.append(a);tr.append(td);body.append(tr);
-   });
-   if(!d.recent_matches?.length){const tr=document.createElement('tr'),td=document.createElement('td');td.colSpan=8;td.textContent='No match plans yet. Create one in the Squad Builder to start the growth loop.';tr.append(td);body.append(tr)}
-   message.textContent='Growth data loaded · '+new Date().toLocaleTimeString();
-   content.hidden=false;
-  }catch(error){message.textContent=error.message||'Unable to load growth data.';message.classList.add('growth-error')}
- }
- document.getElementById('refreshGrowth').addEventListener('click',load);load();
-})();
-</script><script defer src="/protection.secure.js"></script></body></html>
+<script defer src="/admin-growth.inline.secure.js"></script><script defer src="/protection.secure.js"></script></body></html>
