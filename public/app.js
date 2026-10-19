@@ -25,7 +25,7 @@
     let visible = 0;
     cards.forEach(card => {
       const sportMatch = activeSportFilter === 'all' || card.dataset.sport === activeSportFilter || (activeSportFilter === 'box' && card.dataset.sport === 'cricket');
-      const textMatch = !query || card.textContent.toLowerCase().includes(query) || 'gorakhpur'.includes(query);
+      const textMatch = !query || card.textContent.toLowerCase().includes(query) || ['gorakhpur','gkp'].includes(query);
       card.hidden = !(sportMatch && textMatch);
       if (!card.hidden) visible++;
     });
@@ -87,6 +87,62 @@
     const readableDate = date ? new Date(`${date}T12:00:00`).toLocaleDateString(undefined,{weekday:'short',day:'numeric',month:'short',year:'numeric'}) : 'Date to be decided';
     return {sport,date,time,players,area,readableDate,text:`🏟️ BOOKRR MATCH INVITE\n\nWho’s in for ${sport.toLowerCase()}?\n📅 ${readableDate}\n⏰ ${time}\n👥 Looking for ${players} players\n📍 ${area}\n\nReply IN if you’re playing. Let’s lock a turf on BOOKRR: ${location.origin}/#book\n\nInvite only — this is not a confirmed turf booking.`};
   }
+  let currentMatchToken = '';
+  let currentMatchFingerprint = '';
+  let linkedMatchStartTime = '';
+  function matchFingerprint(plan) {
+    return JSON.stringify([plan.sport, plan.date, plan.time, plan.players, plan.area === 'your area' ? '' : plan.area]);
+  }
+  function getMatchVisitorKey() {
+    const keyName = 'bookrr-match-visitor';
+    try {
+      let key = sessionStorage.getItem(keyName);
+      if (!key) {
+        key = crypto.randomUUID ? crypto.randomUUID() : 'v_' + Date.now().toString(36) + '_' + Math.random().toString(36).slice(2) + Math.random().toString(36).slice(2);
+        sessionStorage.setItem(keyName, key);
+      }
+      return key;
+    } catch {
+      return 'v_' + Date.now().toString(36) + '_' + Math.random().toString(36).slice(2) + Math.random().toString(36).slice(2);
+    }
+  }
+  async function ensurePersistentMatch() {
+    const plan = squadPlan();
+    if (!plan.date) throw new Error('Choose a match date first.');
+    const fingerprint = matchFingerprint(plan);
+    if (currentMatchToken && currentMatchFingerprint === fingerprint) {
+      return { token: currentMatchToken, url: location.origin + '/match.html?token=' + encodeURIComponent(currentMatchToken), match: null };
+    }
+    const payload = {
+      sport: plan.sport,
+      match_date: plan.date,
+      start_time: plan.time,
+      players_needed: plan.players,
+      area: plan.area === 'your area' ? '' : plan.area,
+      organizer_name: 'A teammate',
+      visitor_key: getMatchVisitorKey(),
+      website: ''
+    };
+    const response = await fetch('/api/matches', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
+      body: JSON.stringify(payload)
+    });
+    const data = await response.json().catch(() => ({}));
+    if (!response.ok) throw new Error(data.error || 'Could not create the match invite.');
+    currentMatchToken = data.match.invite_token;
+    currentMatchFingerprint = fingerprint;
+    linkedMatchStartTime = String(data.match.start_time || '').slice(0,5);
+    const tokenInput = document.getElementById('matchTokenInput');
+    if (tokenInput) tokenInput.value = currentMatchToken;
+    return { token: currentMatchToken, url: new URL(data.invite_url, location.origin).toString(), match: data.match };
+  }
+  function matchTimeToOption(value) {
+    const parts = String(value || '').slice(0,5).split(':').map(Number);
+    if (parts.length !== 2 || parts.some(Number.isNaN)) return '';
+    const hour = parts[0] % 12 || 12;
+    return String(hour).padStart(2,'0') + ':' + String(parts[1]).padStart(2,'0') + ' ' + (parts[0] >= 12 ? 'PM' : 'AM');
+  }
   function updateSquadPreview() {
     const plan = squadPlan();
     document.getElementById('playerCountLabel').textContent = `${plan.players} player${plan.players===1?'':'s'}`;
@@ -101,23 +157,53 @@
   document.getElementById('generateInvite')?.addEventListener('click', async () => {
     const plan = squadPlan();
     if (!plan.date) { squadMessage.textContent = 'Choose a match date first, then generate your invite.'; squadDate?.focus(); return; }
+    const button = document.getElementById('generateInvite');
+    button.disabled = true;
+    squadMessage.textContent = 'Creating your shareable match invite…';
     try {
-      if (navigator.share) { await navigator.share({title:'BOOKRR Match Invite',text:plan.text}); squadMessage.textContent = 'Invite shared. Turf booking is still a separate step and is not confirmed yet.'; }
-      else if (navigator.clipboard?.writeText) { await navigator.clipboard.writeText(plan.text); squadMessage.textContent = 'Match invite copied. Paste it into your squad chat. Booking is not confirmed yet.'; }
-      else { window.prompt('Copy your BOOKRR match invite:',plan.text); squadMessage.textContent = 'Copy the invite text into your squad chat. Booking is not confirmed yet.'; }
-    } catch (error) { if (error?.name !== 'AbortError') { try { window.prompt('Copy your BOOKRR match invite:',plan.text); } catch {} } }
+      const saved = await ensurePersistentMatch();
+      const message = `🏟️ BOOKRR MATCH INVITE\n\nWho’s in for ${plan.sport.toLowerCase()}?\n📅 ${plan.readableDate}\n⏰ ${plan.time}\n👥 Looking for ${plan.players} players\n📍 ${plan.area}\n\nOpen the match plan, RSVP, and help organize the game:\n${saved.url}\n\nAn invite is not a confirmed turf booking.`;
+      if (navigator.share) {
+        try {
+          await navigator.share({title:'BOOKRR Match Invite', text:message, url:saved.url});
+          squadMessage.textContent = 'Invite ready and share sheet opened. A turf booking is still a separate step.';
+        } catch (error) {
+          if (error?.name === 'AbortError') squadMessage.textContent = 'Your match invite is saved. Share it with your squad whenever you’re ready.';
+          else throw error;
+        }
+      } else if (navigator.clipboard?.writeText) {
+        await navigator.clipboard.writeText(message);
+        squadMessage.textContent = 'Match invite copied with its unique link. Paste it into your squad chat.';
+      } else {
+        window.prompt('Copy your BOOKRR match invite:', message);
+        squadMessage.textContent = 'Share the unique match link with your squad. Booking is not confirmed yet.';
+      }
+    } catch (error) {
+      squadMessage.textContent = error.message || 'Could not create your invite. Please try again.';
+    } finally { button.disabled = false; }
   });
-  document.getElementById('bookFromPlan')?.addEventListener('click', () => {
+  document.getElementById('bookFromPlan')?.addEventListener('click', async () => {
     const plan = squadPlan();
-    const bookingSport = document.getElementById('sportSelect');
-    const bookingDateInput = document.getElementById('bookingDate');
-    const notes = bookingForm?.elements.notes;
-    if (bookingSport) { const match = [...bookingSport.options].find(option => option.value.toLowerCase() === plan.sport.toLowerCase()); if (match) bookingSport.value = match.value; }
-    if (bookingDateInput && plan.date) bookingDateInput.value = plan.date;
-    if (notes) notes.value = `Match plan: ${plan.players} players, ${plan.time}, area: ${plan.area}. Confirm slot with venue.`;
-    if (typeof loadAvailableTimes === 'function') loadAvailableTimes();
-    document.getElementById('book')?.scrollIntoView({behavior:reduced?'auto':'smooth',block:'start'});
-    squadMessage.textContent = 'Match details copied into the booking form where supported. Choose a venue and available start time; no booking has been submitted.';
+    if (!plan.date) { squadMessage.textContent = 'Choose a match date first, then find a turf.'; squadDate?.focus(); return; }
+    const button = document.getElementById('bookFromPlan');
+    button.disabled = true;
+    try {
+      const saved = await ensurePersistentMatch();
+      const bookingSport = document.getElementById('sportSelect');
+      const bookingDateInput = document.getElementById('bookingDate');
+      const tokenInput = document.getElementById('matchTokenInput');
+      const notes = bookingForm?.elements.notes;
+      if (tokenInput) tokenInput.value = saved.token;
+      linkedMatchStartTime = String(saved.match?.start_time || linkedMatchStartTime || '').slice(0,5);
+      if (bookingSport) { const match = [...bookingSport.options].find(option => option.value.toLowerCase() === plan.sport.toLowerCase()); if (match) bookingSport.value = match.value; }
+      if (bookingDateInput) bookingDateInput.value = plan.date;
+      if (notes) notes.value = `Match plan: ${plan.players} players, ${plan.time}, area: ${plan.area}. Confirm slot with venue.`;
+      if (typeof loadAvailableTimes === 'function') await loadAvailableTimes();
+      document.getElementById('book')?.scrollIntoView({behavior:reduced?'auto':'smooth',block:'start'});
+      squadMessage.textContent = 'Match plan linked. Choose a venue and start time; the reservation is not submitted until you request it and the venue confirms.';
+    } catch (error) {
+      squadMessage.textContent = error.message || 'Could not prepare the booking form.';
+    } finally { button.disabled = false; }
   });
   updateSquadPreview();
   const revealEls = document.querySelectorAll('.reveal, .step');
@@ -155,6 +241,7 @@
   const venueSelect = document.getElementById('venueSelect');
   const bookingForm = document.getElementById('bookingForm');
   const bookingMessage = document.getElementById('bookingMessage');
+  const matchTokenInput = document.getElementById('matchTokenInput');
   const bookingDate = document.getElementById('bookingDate');
   if (bookingDate) {
     const now = new Date();
@@ -181,6 +268,7 @@
       if (!response.ok) throw new Error(data.error || 'Availability is temporarily unavailable.');
       startTimeSelect.replaceChildren(new Option(data.available_times?.length ? 'Choose a start time' : 'No times currently listed', ''));
       (data.available_times || []).forEach(time => startTimeSelect.add(new Option(time, time)));
+      if (linkedMatchStartTime && data.available_times?.includes(linkedMatchStartTime)) startTimeSelect.value = linkedMatchStartTime;
       if (availabilityNote) availabilityNote.textContent = data.note || 'Times are provisional until the venue confirms.';
     } catch (error) {
       startTimeSelect.replaceChildren(new Option('Could not load times', ''));
@@ -217,17 +305,50 @@
       });
       const data = await response.json().catch(() => ({}));
       if (response.status === 401) {
-        location.href = '/login?next=' + encodeURIComponent('/#book'); return;
+        const nextPath = values.match_token ? '/?match=' + encodeURIComponent(values.match_token) + '#book' : '/#book';
+        location.href = '/login?next=' + encodeURIComponent(nextPath); return;
       }
       if (!response.ok) throw new Error(data.error || 'Could not submit your request.');
+      const linkedMatchToken = values.match_token || '';
       bookingMessage.textContent = `Request #${data.booking.id} received for ${venue.name}. ${data.message}`;
       bookingForm.reset();
       await loadAvailableTimes();
       bookingDate.min = `${new Date().getFullYear()}-${String(new Date().getMonth()+1).padStart(2,'0')}-${String(new Date().getDate()).padStart(2,'0')}`;
       notify('Booking request saved securely. Venue confirmation is still required.');
+      if (linkedMatchToken) { location.href = '/match.html?token=' + encodeURIComponent(linkedMatchToken); return; }
     } catch (error) { bookingMessage.textContent = error.message || 'Network error. Please try again.'; }
     finally { submit.disabled = false; }
   });
+  // If a player arrives from a shared match invite, keep the booking attributed to that match.
+  async function hydrateMatchPlanForBooking() {
+    const token = new URLSearchParams(location.search).get('match');
+    if (!token) return;
+    try {
+      const response = await fetch('/api/matches?token=' + encodeURIComponent(token), { headers: { Accept: 'application/json' }, cache: 'no-store' });
+      const data = await response.json().catch(() => ({}));
+      if (!response.ok) throw new Error(data.error || 'Could not load the shared match plan.');
+      const m = data.match;
+      currentMatchToken = token;
+      if (squadSport) squadSport.value = m.sport;
+      if (squadDate) squadDate.value = m.match_date;
+      if (squadTime) squadTime.value = matchTimeToOption(m.start_time);
+      if (squadSize) squadSize.value = String(m.players_needed);
+      if (squadArea) squadArea.value = m.area || '';
+      currentMatchFingerprint = matchFingerprint(squadPlan());
+      linkedMatchStartTime = String(m.start_time || '').slice(0,5);
+      if (matchTokenInput) matchTokenInput.value = token;
+      updateSquadPreview();
+      const bookingSport = document.getElementById('sportSelect');
+      if (bookingSport) bookingSport.value = m.sport;
+      if (bookingDate) bookingDate.value = m.match_date;
+      if (bookingForm?.elements.notes) bookingForm.elements.notes.value = `Shared match plan: ${m.players_needed} players in ${m.area || 'your area'}. Confirm slot with venue.`;
+      await loadAvailableTimes();
+      if (bookingMessage) bookingMessage.textContent = 'Shared match plan loaded. Choose a venue and confirm the available time before sending a booking request.';
+    } catch (error) {
+      if (bookingMessage) bookingMessage.textContent = error.message || 'Could not load the shared match plan.';
+    }
+  }
+  hydrateMatchPlanForBooking();
   // Installable mobile app (PWA). Booking APIs are deliberately never cached.
   if ('serviceWorker' in navigator && location.protocol === 'https:') {
     window.addEventListener('load', () => navigator.serviceWorker.register('/sw.js').catch(() => {}));

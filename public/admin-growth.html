@@ -1,0 +1,60 @@
+<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="robots" content="noindex,nofollow"><meta name="theme-color" content="#10140f"><title>Growth analytics · BOOKRR</title><link rel="stylesheet" href="/theme.css"><style>
+.growth-page{max-width:1240px;margin:50px auto 90px;padding:0 24px}.growth-title{font:900 clamp(55px,8vw,92px)/.8 var(--display);margin:23px 0}.growth-title span{color:var(--lime)}.growth-intro{font-size:12px;color:#aab49e;line-height:1.8;max-width:650px}.growth-grid{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:12px;margin:30px 0}.growth-stat{padding:20px;background:#191e17;border:1px solid #ffffff1c;min-width:0}.growth-stat small{display:block;font-size:9px;letter-spacing:.13em;color:#aab49e;text-transform:uppercase}.growth-stat strong{display:block;font:900 43px var(--display);color:var(--lime);margin:10px 0 2px}.growth-stat span{font-size:10px;color:#9ca793;line-height:1.6}.growth-panel{padding:22px;background:#191e17;border:1px solid #ffffff1c;margin-top:17px;overflow:hidden}.growth-panel h2{font:800 30px var(--display);margin:0 0 16px}.growth-funnel{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:9px}.funnel-step{padding:14px;border:1px solid #ffffff18;background:#10140f}.funnel-step small{display:block;color:#aab49e;font-size:8px;letter-spacing:.1em}.funnel-step strong{display:block;font:800 30px var(--display);color:var(--white);margin-top:8px}.growth-table-wrap{overflow-x:auto}.growth-table{width:100%;border-collapse:collapse;font-size:11px;min-width:750px}.growth-table th,.growth-table td{text-align:left;padding:12px 10px;border-bottom:1px solid #ffffff18;vertical-align:top}.growth-table th{color:#9da991;font-size:9px;letter-spacing:.1em;text-transform:uppercase}.growth-table td{color:#ecf0e7}.growth-tag{display:inline-block;padding:5px 7px;border:1px solid #d5ff3f50;color:var(--lime);font-size:8px;text-transform:uppercase;letter-spacing:.08em}.growth-muted{color:#9ca793;font-size:11px;line-height:1.7}.growth-error{color:#ffcf83}.growth-toolbar{display:flex;justify-content:space-between;align-items:center;gap:12px;flex-wrap:wrap;margin:20px 0}.growth-toolbar a,.growth-toolbar button{background:transparent;color:var(--white);border:1px solid #ffffff30;padding:10px 14px;font-size:10px;cursor:pointer}.growth-toolbar button:hover,.growth-toolbar a:hover{border-color:var(--lime);color:var(--lime)}@media(max-width:850px){.growth-grid{grid-template-columns:repeat(2,minmax(0,1fr))}.growth-funnel{grid-template-columns:repeat(2,minmax(0,1fr))}}@media(max-width:500px){.growth-page{padding:0 15px;margin-top:35px}.growth-grid{gap:8px}.growth-stat{padding:14px}.growth-stat strong{font-size:35px}.growth-panel{padding:15px}.growth-funnel{gap:7px}}
+</style></head><body><nav class="nav"><a class="brand" href="/admin.html"><img class="brand-logo" src="/icon.svg" alt="" width="38" height="38">BOOKRR</a><div class="nav-links" style="display:flex">ADMIN / GROWTH</div><a class="nav-cta" href="/admin.html">Control center ↗</a></nav><main class="growth-page">
+<div class="eyebrow">RESTRICTED · ADMIN ANALYTICS · LAST 90 DAYS</div><h1 class="growth-title">GROWTH<br><span>ENGINE.</span></h1><p class="growth-intro">Measure the journey from match plans to invite opens, squad responses and booking outcomes. This dashboard counts recorded events; it does not imply a visitor is a unique real person or that an RSVP is a confirmed reservation.</p>
+<div class="growth-toolbar"><p id="growthMessage" class="growth-muted" role="status" aria-live="polite">Loading growth data…</p><div><button id="refreshGrowth" type="button">Refresh data ↻</button> <a href="/admin.html">Back to admin ↗</a></div></div>
+<div id="growthContent" hidden>
+<section class="growth-grid" aria-label="Top growth metrics">
+<div class="growth-stat"><small>Match plans created</small><strong id="plansCreated">0</strong><span>Within the last 90 days</span></div>
+<div class="growth-stat"><small>Invite opens</small><strong id="inviteOpens">0</strong><span>Unique browser-session keys per match</span></div>
+<div class="growth-stat"><small>Squad responses</small><strong id="rsvpTotal">0</strong><span>First recorded response per session key and match</span></div>
+<div class="growth-stat"><small>Linked bookings</small><strong id="linkedBookings">0</strong><span>Requests started from a match invite</span></div>
+</section>
+<section class="growth-panel"><h2>THE REFERRAL FUNNEL</h2><div class="growth-funnel">
+<div class="funnel-step"><small>INVITE OPENS</small><strong id="funnelOpens">0</strong></div>
+<div class="funnel-step"><small>RSVP RECORDS</small><strong id="funnelRsvps">0</strong></div>
+<div class="funnel-step"><small>CONFIRMED BOOKINGS</small><strong id="funnelConfirmed">0</strong></div>
+<div class="funnel-step"><small>COMPLETED BOOKINGS</small><strong id="funnelCompleted">0</strong></div>
+</div><p class="growth-muted" id="funnelNote" style="margin-top:14px">Conversion rates will be more meaningful after real matches start flowing through the system.</p></section>
+<section class="growth-panel"><h2>RECENT MATCH PLANS</h2><div class="growth-table-wrap"><table class="growth-table"><thead><tr><th>Created</th><th>Match</th><th>Plan date</th><th>Status</th><th>Opens</th><th>RSVPs</th><th>Linked bookings</th><th>Invite</th></tr></thead><tbody id="recentMatches"></tbody></table></div></section>
+<p class="growth-muted" style="margin-top:18px">Privacy note: invite analytics use a temporary browser-session key, not names, email addresses or phone numbers. Reward and payout reports are intentionally absent until qualification and fraud checks are implemented.</p>
+</div></main>
+<script>
+(() => {
+ const message=document.getElementById('growthMessage'),content=document.getElementById('growthContent');
+ const count=n=>new Intl.NumberFormat().format(Number(n||0));
+ const safe=value=>String(value??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+ async function load(){
+  message.textContent='Loading growth data…';message.classList.remove('growth-error');
+  try{
+   const r=await fetch('/api/admin/growth',{headers:{Accept:'application/json'},cache:'no-store'});
+   const d=await r.json().catch(()=>({}));
+   if(r.status===401){message.textContent='Admin sign-in required. Sign in with an authorized BOOKRR admin account.';message.classList.add('growth-error');return}
+   if(r.status===403){message.textContent='Access denied. This dashboard is restricted to project owners and authorized admin collaborators.';message.classList.add('growth-error');return}
+   if(!r.ok)throw new Error(d.error||'Growth data is temporarily unavailable.');
+   const t=d.totals||{},e=d.events||{},b=d.booking_statuses||{};
+   document.getElementById('plansCreated').textContent=count(t.plans_created);
+   document.getElementById('inviteOpens').textContent=count(e.invite_opened);
+   document.getElementById('rsvpTotal').textContent=count(e.rsvp_submitted);
+   document.getElementById('linkedBookings').textContent=count((b.requested||0)+(b.confirmed||0)+(b.completed||0));
+   document.getElementById('funnelOpens').textContent=count(e.invite_opened);
+   document.getElementById('funnelRsvps').textContent=count(e.rsvp_submitted);
+   document.getElementById('funnelConfirmed').textContent=count((b.confirmed||0)+(b.completed||0));
+   document.getElementById('funnelCompleted').textContent=count(b.completed||0);
+   const open=Number(e.invite_opened||0),rsvps=Number(e.rsvp_submitted||0);
+   document.getElementById('funnelNote').textContent=open?('Recorded RSVP events relative to invite opens: '+Math.round(rsvps/open*100)+'%. This is a directional funnel indicator, not a causal or person-level conversion rate.'): 'No invite opens have been recorded yet. Share a match invite and ask the squad to open it to begin measuring the funnel.';
+   const body=document.getElementById('recentMatches');body.replaceChildren();
+   (d.recent_matches||[]).forEach(m=>{
+    const tr=document.createElement('tr');
+    const values=[new Date(m.created_at).toLocaleDateString(),m.organizer_name+' · '+m.sport,m.match_date,m.status,count(m.unique_opens),count(m.rsvp_count),count(m.linked_booking_count)];
+    values.forEach((v,i)=>{const td=document.createElement('td');td.textContent=v;if(i===3){const tag=document.createElement('span');tag.className='growth-tag';tag.textContent=v;td.replaceChildren(tag)}tr.append(td)});
+    const td=document.createElement('td'),a=document.createElement('a');a.href='/match.html?token='+encodeURIComponent(m.invite_token);a.textContent='Open invite ↗';a.style.color='var(--lime)';td.append(a);tr.append(td);body.append(tr);
+   });
+   if(!d.recent_matches?.length){const tr=document.createElement('tr'),td=document.createElement('td');td.colSpan=8;td.textContent='No match plans yet. Create one in the Squad Builder to start the growth loop.';tr.append(td);body.append(tr)}
+   message.textContent='Growth data loaded · '+new Date().toLocaleTimeString();
+   content.hidden=false;
+  }catch(error){message.textContent=error.message||'Unable to load growth data.';message.classList.add('growth-error')}
+ }
+ document.getElementById('refreshGrowth').addEventListener('click',load);load();
+})();
+</script></body></html>

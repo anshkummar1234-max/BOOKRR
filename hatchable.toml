@@ -17,3 +17,19 @@ write = "own"
 [db.tables.customer_preferences]
 read = "own"
 write = "own"
+
+[db.tables.match_plans]
+read = "public"
+write = "public"
+
+[db.tables.match_rsvps]
+read = "public"
+write = "public"
+
+[db.tables.match_events]
+read = "public"
+write = "public"
+
+[db.tables.growth_rate_limits]
+read = "public"
+write = "public"

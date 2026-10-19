@@ -18,6 +18,7 @@ export default async function (req, res) {
   const phone = typeof body.contact_phone === 'string' ? body.contact_phone.replace(/[\s()-]/g, '') : '';
   const sport = typeof body.sport === 'string' ? body.sport.trim() : '';
   const notes = typeof body.notes === 'string' ? body.notes.trim().slice(0, 500) : '';
+  const matchToken = typeof body.match_token === 'string' ? body.match_token.trim() : '';
   const duration = Number(body.duration_hours || 1);
   if (!Number.isSafeInteger(venueId) || venueId < 1) return res.status(400).json({ error: 'Choose a valid turf.' });
   if (name.length < 2 || name.length > 80) return res.status(400).json({ error: 'Enter your name (2–80 characters).' });
@@ -29,8 +30,20 @@ export default async function (req, res) {
   if (!Number.isInteger(duration) || duration < 1 || duration > 4) return res.status(400).json({ error: 'Duration must be 1–4 hours.' });
   // Operating-hours validation is performed after loading the venue below.
   if (!['Football','Cricket','Badminton','Other sports'].includes(sport)) return res.status(400).json({ error: 'Choose a listed sport.' });
+  if (matchToken && !/^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(matchToken)) return res.status(400).json({ error: 'This match invite link is invalid. Open the invite again and retry.' });
 
   try {
+    let matchPlanId = null;
+    if (matchToken) {
+      const matchPlan = await db.query('SELECT id, sport, match_date::text AS match_date, status FROM match_plans WHERE invite_token = $1::uuid AND expires_at > now()', [matchToken]);
+      if (!matchPlan.rows.length) return res.status(404).json({ error: 'This match invite has expired or is no longer available.' });
+      const plan = matchPlan.rows[0];
+      if (!['planned','booking_requested'].includes(plan.status)) return res.status(409).json({ error: 'This match plan is already confirmed, completed or cancelled.' });
+      if (String(plan.match_date) !== body.booking_date || plan.sport !== sport) return res.status(400).json({ error: 'Keep the sport and date from the shared match plan, or start a new plan before booking.' });
+      const pendingForPlan = await db.query("SELECT id FROM bookings WHERE match_plan_id = $1 AND status IN ('requested','confirmed') LIMIT 1", [plan.id]);
+      if (pendingForPlan.rows.length) return res.status(409).json({ error: 'This match already has a pending or confirmed booking request.' });
+      matchPlanId = plan.id;
+    }
     const venue = await db.query('SELECT id, sports, opening_time::text AS opening_time, closing_time::text AS closing_time FROM venues WHERE id = $1 AND is_active = true', [venueId]);
     if (!venue.rows.length) return res.status(404).json({ error: 'That turf is no longer listed.' });
     if (!venue.rows[0].sports.includes(sport) && sport !== 'Other sports') return res.status(400).json({ error: 'That sport is not listed for this venue. Please contact the venue to confirm.' });
@@ -52,23 +65,34 @@ export default async function (req, res) {
     // serializes competing booking requests for this venue before the insert query.
     const tx = await db.transaction([
       { sql: 'SELECT id FROM venues WHERE id = $1 AND is_active = true FOR UPDATE', params: [venueId] },
+      { sql: 'SELECT id FROM match_plans WHERE id = $1::bigint FOR UPDATE', params: [matchPlanId] },
       {
-        sql: "INSERT INTO bookings (user_id, venue_id, customer_name, contact_phone, booking_date, start_time, duration_hours, sport, notes) " +
-          "SELECT $1,$2,$3,$4,$5::date,$6::time,$7,$8,$9 " +
+        sql: "INSERT INTO bookings (user_id, venue_id, customer_name, contact_phone, booking_date, start_time, duration_hours, sport, notes, match_plan_id) " +
+          "SELECT $1,$2,$3,$4,$5::date,$6::time,$7,$8,$9,$10::bigint " +
           "WHERE EXISTS (SELECT 1 FROM venues WHERE id = $2 AND is_active = true) " +
+          "AND ($10::bigint IS NULL OR (EXISTS (SELECT 1 FROM match_plans mp WHERE mp.id = $10::bigint AND mp.status IN ('planned','booking_requested') AND mp.expires_at > now()) " +
+          "AND NOT EXISTS (SELECT 1 FROM bookings mb WHERE mb.match_plan_id = $10::bigint AND mb.status IN ('requested','confirmed'))) ) " +
           "AND NOT EXISTS (SELECT 1 FROM bookings b WHERE b.venue_id = $2 AND b.booking_date = $5::date " +
           "AND b.status IN ('requested','confirmed') " +
           "AND b.start_time < ($6::time + ($7::text || ' hours')::interval) " +
           "AND (b.start_time + (b.duration_hours::text || ' hours')::interval) > $6::time) " +
-          "RETURNING id, venue_id, booking_date, start_time, duration_hours, sport, status, created_at",
-        params: [String(req.user.id), venueId, name, phone, body.booking_date, body.start_time, duration, sport, notes]
+          "RETURNING id, venue_id, booking_date, start_time, duration_hours, sport, status, match_plan_id, created_at",
+        params: [String(req.user.id), venueId, name, phone, body.booking_date, body.start_time, duration, sport, notes, matchPlanId]
       }
     ]);
-    const inserted = tx?.results?.[1]?.rows || tx?.result?.results?.[1]?.rows || [];
+    const inserted = tx?.results?.[2]?.rows || tx?.result?.results?.[2]?.rows || [];
     if (!inserted.length) {
       const stillActive = await db.query('SELECT id FROM venues WHERE id = $1 AND is_active = true', [venueId]);
       if (!stillActive.rows.length) return res.status(404).json({ error: 'That turf is no longer listed.' });
       return res.status(409).json({ error: 'That time overlaps an existing request or confirmed booking. Please choose another slot.' });
+    }
+    if (inserted[0].match_plan_id) {
+      try {
+        await db.transaction([
+          { sql: "UPDATE match_plans SET status = 'booking_requested', venue_id = $1, start_time = $2::time, updated_at = now() WHERE id = $3 AND status IN ('planned','booking_requested')", params: [venueId, body.start_time, inserted[0].match_plan_id] },
+          { sql: "INSERT INTO match_events (match_id, event_type, event_key) VALUES ($1, 'booking_requested', $2) ON CONFLICT DO NOTHING", params: [inserted[0].match_plan_id, String(inserted[0].id)] }
+        ]);
+      } catch (syncError) { console.error('match growth status sync failed', syncError); }
     }
     return res.status(201).json({
       booking: inserted[0],

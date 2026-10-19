@@ -29,11 +29,22 @@ export default async function (req, res) {
       return res.status(400).json({ error: 'Provide a valid booking ID and status.' });
     }
     const updated = await db.query(
-      'UPDATE bookings b SET status = $1, updated_at = now() WHERE b.id = $2 AND EXISTS (SELECT 1 FROM venues v WHERE v.id = b.venue_id AND v.owner_user_id = $3) RETURNING b.id, b.status',
+      'UPDATE bookings b SET status = $1, updated_at = now() WHERE b.id = $2 AND EXISTS (SELECT 1 FROM venues v WHERE v.id = b.venue_id AND v.owner_user_id = $3) RETURNING b.id, b.status, b.match_plan_id',
       [status, id, userId]
     );
     if (!updated.rows.length) return res.status(404).json({ error: 'Booking not found for a venue you manage.' });
-    return res.json({ booking: updated.rows[0] });
+    const linkedPlanId = updated.rows[0].match_plan_id;
+    if (linkedPlanId) {
+      try {
+        const planStatus = status === 'confirmed' ? 'confirmed' : status === 'completed' ? 'completed' : (status === 'rejected' || status === 'cancelled') ? 'planned' : null;
+        if (planStatus) await db.query("UPDATE match_plans SET status = $1, updated_at = now() WHERE id = $2 AND status <> 'cancelled'", [planStatus, linkedPlanId]);
+        if (status === 'confirmed' || status === 'completed') {
+          const eventType = status === 'confirmed' ? 'booking_confirmed' : 'booking_completed';
+          await db.query('INSERT INTO match_events (match_id, event_type, event_key) VALUES ($1,$2,$3) ON CONFLICT DO NOTHING', [linkedPlanId, eventType, String(updated.rows[0].id)]);
+        }
+      } catch (syncError) { console.error('match growth status sync failed', syncError); }
+    }
+    return res.json({ booking: { id: updated.rows[0].id, status: updated.rows[0].status } });
   } catch (error) {
     return res.status(500).json({ error: 'Could not load or update your owner dashboard.' });
   }
