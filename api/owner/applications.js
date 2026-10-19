@@ -33,6 +33,13 @@ export default async function (req, res) {
     if (!sports.length) return res.status(400).json({ error: 'Choose at least one sport.' });
     if (rate !== null && (!Number.isFinite(rate) || rate < 0 || rate > 50000)) return res.status(400).json({ error: 'Enter a valid hourly price or leave it blank.' });
     if (!validTime(opening) || !validTime(closing) || opening >= closing) return res.status(400).json({ error: 'Opening time must be earlier than closing time.' });
+    const recentApplications = await db.query(
+      "SELECT count(*)::int AS total FROM venue_owner_applications WHERE user_id = $1 AND created_at > now() - interval '24 hours'",
+      [userId]
+    );
+    if (Number(recentApplications.rows[0]?.total || 0) >= 3) {
+      return res.status(429).json({ error: 'You have reached the venue application limit. Please try again tomorrow.' });
+    }
     const duplicate = await db.query(
       "SELECT id FROM venue_owner_applications WHERE user_id = $1 AND lower(venue_name) = lower($2) AND area = $3 AND status = 'pending' LIMIT 1",
       [userId, venueName, area]
