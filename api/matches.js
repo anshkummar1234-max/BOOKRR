@@ -29,8 +29,9 @@ function clean(value, max) { return typeof value === 'string' ? value.trim().rep
 function jsonError(res, status, error) { return res.status(status).json({ error }); }
 
 async function rateLimitCreate(req) {
-  const forwarded = req.headers?.['x-forwarded-for'];
-  const rawIp = String(req.ip || req.headers?.['x-real-ip'] || (typeof forwarded === 'string' ? forwarded.split(',')[0] : '') || 'unknown').trim().slice(0, 100);
+  // Prefer the platform's client IP or trusted proxy-set X-Real-IP.
+  // Do not trust the caller-controlled leftmost X-Forwarded-For value.
+  const rawIp = String(req.ip || req.headers?.['x-real-ip'] || 'unknown').trim().slice(0, 100) || 'unknown';
   const bytes = new TextEncoder().encode(rawIp);
   const digest = await crypto.subtle.digest('SHA-256', bytes);
   const ipHash = Array.from(new Uint8Array(digest), b => b.toString(16).padStart(2, '0')).join('');

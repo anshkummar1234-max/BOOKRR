@@ -8,9 +8,10 @@ const visitorPattern = /^[a-zA-Z0-9_-]{16,80}$/;
 const allowedResponses = ['going', 'maybe', 'not_going'];
 function clean(value, max) { return typeof value === 'string' ? value.trim().replace(/[\u0000-\u001f\u007f]/g, '').slice(0, max) : ''; }
 async function withinRsvpRateLimit(req) {
-  const forwarded = req.headers?.['x-forwarded-for'];
-  const rawIp = String(req.ip || req.headers?.['x-real-ip'] || (typeof forwarded === 'string' ? forwarded.split(',')[0] : '') || '').trim().slice(0, 100);
-  if (!rawIp) return true; // Never put every visitor behind one shared "unknown IP" bucket.
+  // Prefer the platform's client IP or trusted proxy-set X-Real-IP.
+  // Ignore caller-controlled X-Forwarded-For to prevent easy rate-limit bypass.
+  // If no IP is available, use a shared fallback bucket rather than disabling the limit.
+  const rawIp = String(req.ip || req.headers?.['x-real-ip'] || 'unknown').trim().slice(0, 100) || 'unknown';
   const digest = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(rawIp));
   const ipHash = Array.from(new Uint8Array(digest), b => b.toString(16).padStart(2, '0')).join('');
   const result = await db.query(
