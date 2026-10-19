@@ -19,17 +19,17 @@ read = "own"
 write = "own"
 
 [db.tables.match_plans]
-read = "member"
-write = "member"
+read = "public"
+write = "public"
 
 [db.tables.match_rsvps]
-read = "member"
-write = "member"
+read = "public"
+write = "public"
 
 [db.tables.match_events]
-read = "member"
-write = "member"
+read = "public"
+write = "public"
 
 [db.tables.growth_rate_limits]
-read = "member"
-write = "member"
+read = "public"
+write = "public"
