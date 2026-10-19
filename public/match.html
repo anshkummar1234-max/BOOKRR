@@ -167,8 +167,8 @@
       const res = await fetch('/api/matches-rsvp', {method:'POST',headers:{'Content-Type':'application/json',Accept:'application/json'},body:JSON.stringify({token,visitor_key:key,display_name:document.getElementById('playerName').value,response})});
       const data = await res.json().catch(() => ({}));
       if (!res.ok) throw new Error(data.error || 'Could not save your response.');
-      rsvpMessage.textContent = data.message || 'Response saved.';
       await loadMatch();
+      rsvpMessage.textContent = data.message || 'Response saved.';
     } catch (error) { rsvpMessage.textContent = error.message || 'Network error. Try again.'; }
     finally { saveButton.disabled = false; }
   });

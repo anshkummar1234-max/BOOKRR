@@ -285,6 +285,7 @@
         liveVenues = Array.isArray(data.venues) ? data.venues : [];
         venueSelect.replaceChildren(new Option('Choose a Gorakhpur turf', ''));
         liveVenues.forEach(venue => venueSelect.add(new Option(`${venue.name} — ${venue.area}${venue.hourly_rate == null ? '' : ' · ₹' + venue.hourly_rate + '/hour'}`, venue.id)));
+        if (new URLSearchParams(location.search).has('rebook') && !new URLSearchParams(location.search).has('match')) hydratePreviousBooking();
       })
       .catch(() => { venueSelect.replaceChildren(new Option('Venue directory temporarily unavailable', '')); });
   }
@@ -320,6 +321,46 @@
     finally { submit.disabled = false; }
   });
   // If a player arrives from a shared match invite, keep the booking attributed to that match.
+  async function hydratePreviousBooking() {
+    const bookingId = new URLSearchParams(location.search).get('rebook') || '';
+    if (!/^\d+$/.test(bookingId)) {
+      if (bookingMessage) bookingMessage.textContent = 'This rebooking link is invalid. Open My Bookings and use Run It Back.';
+      return;
+    }
+    try {
+      const response = await fetch('/api/my-bookings', { headers: { Accept: 'application/json' }, cache: 'no-store' });
+      const data = await response.json().catch(() => ({}));
+      if (response.status === 401) {
+        location.href = '/login?next=' + encodeURIComponent('/?rebook=' + bookingId + '#book');
+        return;
+      }
+      if (!response.ok) throw new Error(data.error || 'Could not load your booking history.');
+      const booking = (data.bookings || []).find(item => String(item.id) === bookingId);
+      if (!booking || !['confirmed','completed'].includes(booking.status)) {
+        throw new Error('Only your confirmed or completed bookings can be rebooked. Open My Bookings to check the status.');
+      }
+      const venue = liveVenues.find(item => String(item.id) === String(booking.venue_id));
+      if (!venue) throw new Error('That turf is no longer listed. Choose another venue to plan your next game.');
+      if (venueSelect) venueSelect.value = String(booking.venue_id);
+      const bookingSport = document.getElementById('sportSelect');
+      if (bookingSport) {
+        const option = [...bookingSport.options].find(item => item.value === booking.sport);
+        if (option) bookingSport.value = booking.sport;
+      }
+      if (bookingDate) bookingDate.value = '';
+      if (bookingForm?.elements.duration_hours) bookingForm.elements.duration_hours.value = String(booking.duration_hours || 1);
+      if (bookingForm?.elements.notes) bookingForm.elements.notes.value = `Run it back from previous booking #${booking.id}. Choose a new date and time; confirm price and availability with the venue.`;
+      currentMatchToken = '';
+      currentMatchFingerprint = '';
+      linkedMatchStartTime = '';
+      if (matchTokenInput) matchTokenInput.value = '';
+      await loadAvailableTimes();
+      if (bookingMessage) bookingMessage.textContent = `Ready to run it back at ${booking.venue_name}. Choose a new date and available time; this will create a new request, not repeat the old reservation.`;
+      document.getElementById('book')?.scrollIntoView({ behavior: reduced ? 'auto' : 'smooth', block: 'start' });
+    } catch (error) {
+      if (bookingMessage) bookingMessage.textContent = error.message || 'Could not prepare your rebooking.';
+    }
+  }
   async function hydrateMatchPlanForBooking() {
     const token = new URLSearchParams(location.search).get('match');
     if (!token) return;
