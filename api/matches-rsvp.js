@@ -7,6 +7,21 @@ const tokenPattern = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3
 const visitorPattern = /^[a-zA-Z0-9_-]{16,80}$/;
 const allowedResponses = ['going', 'maybe', 'not_going'];
 function clean(value, max) { return typeof value === 'string' ? value.trim().replace(/[\u0000-\u001f\u007f]/g, '').slice(0, max) : ''; }
+async function withinRsvpRateLimit(req) {
+  const forwarded = req.headers?.['x-forwarded-for'];
+  const rawIp = String(req.ip || req.headers?.['x-real-ip'] || (typeof forwarded === 'string' ? forwarded.split(',')[0] : '') || '').trim().slice(0, 100);
+  if (!rawIp) return true; // Never put every visitor behind one shared "unknown IP" bucket.
+  const digest = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(rawIp));
+  const ipHash = Array.from(new Uint8Array(digest), b => b.toString(16).padStart(2, '0')).join('');
+  const result = await db.query(
+    "INSERT INTO growth_rate_limits (ip_hash, action_key, window_start, request_count) VALUES ($1, 'match_rsvp', date_trunc('hour', now()), 1) " +
+    "ON CONFLICT (ip_hash, action_key) DO UPDATE SET " +
+    "request_count = CASE WHEN growth_rate_limits.window_start < date_trunc('hour', now()) THEN 1 ELSE growth_rate_limits.request_count + 1 END, " +
+    "window_start = date_trunc('hour', now()), updated_at = now() RETURNING request_count",
+    [ipHash]
+  );
+  return Number(result.rows[0]?.request_count || 0) <= 60;
+}
 
 export default async function (req, res) {
   const body = req.body || {};
@@ -18,6 +33,7 @@ export default async function (req, res) {
   if (!visitorPattern.test(visitorKey)) return res.status(400).json({ error: 'Refresh the page and try again.' });
   if (!allowedResponses.includes(response)) return res.status(400).json({ error: 'Choose a valid RSVP response.' });
   try {
+    if (!(await withinRsvpRateLimit(req))) return res.status(429).json({ error: 'Too many responses from this connection. Please try again later.' });
     const found = await db.query(
       "SELECT id FROM match_plans WHERE invite_token = $1::uuid AND expires_at > now() " +
       "AND status IN ('planned','booking_requested') AND match_date >= (now() AT TIME ZONE 'Asia/Kolkata')::date",
