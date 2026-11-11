@@ -8,7 +8,7 @@ BOOKRR is a turf discovery and booking-request platform. The repository includes
 
 ## Product capabilities
 
-- Browse active sports venues and view sports, location, listed rates, opening hours, and verification status.
+- Browse database-backed active sports venues. Discovery now defaults to Gorakhpur and filters by city/area, sport, listed rate, and verification status.
 - Check BOOKRR-side slot availability and submit booking requests.
 - View personal booking requests after signing in.
 - Create shareable match plans and collect player RSVPs.
@@ -19,7 +19,7 @@ BOOKRR is a turf discovery and booking-request platform. The repository includes
 
 - A booking submission is a **request**, not a confirmed reservation. The venue must confirm the slot and price.
 - Availability reflects BOOKRR booking records only. Walk-in bookings and external venue calendars are not synchronized.
-- Some homepage discovery cards contain example/public-directory information. Do not treat their ratings, prices, or availability as verified live data.
+- The discovery grid is populated from active database venue records; it no longer presents the homepage's old hard-coded example cards as live listings. Only records marked verified receive a verified badge.
 - Online UPI/card payments are not enabled in the current codebase.
 - Venue hours and listing details may be provisional until independently verified.
 
